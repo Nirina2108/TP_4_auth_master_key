@@ -1,24 +1,15 @@
 package com.example.auth.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-
+import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Entité représentant un utilisateur.
+ * Entite representant un utilisateur.
  *
- * TP4 :
- * - le mot de passe n'est jamais stocké en clair
- * - le mot de passe est stocké sous forme chiffrée
- * - le champ passwordEncrypted contient la valeur protégée
- * - le token reste utilisé pour les routes protegees comme /api/me
- *
- * Cette entité reste simple pour un usage pédagogique.
+ * Cette classe stocke les informations principales
+ * d'un utilisateur authentifie dans l'application.
  *
  * @author Poun
  * @version 4.0
@@ -28,7 +19,7 @@ import java.time.LocalDateTime;
 public class User {
 
     /**
-     * Identifiant unique de l'utilisateur.
+     * Identifiant unique.
      */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -41,167 +32,100 @@ public class User {
     private String name;
 
     /**
-     * Email unique de l'utilisateur.
+     * Email unique.
      */
     @Column(nullable = false, unique = true)
     private String email;
 
     /**
-     * Mot de passe chiffré.
-     *
-     * La valeur stockée ici est produite par le CryptoService
-     * avec la Master Key du TP4.
+     * Mot de passe ou hash du mot de passe.
      */
-    @Column(name = "password_encrypted", nullable = false, length = 500)
-    private String passwordEncrypted;
+    @Column(name = "password_hash", nullable = false)
+    private String password;
 
     /**
-     * Token d'authentification utilisé pour les appels protégés.
+     * Token de session.
      */
-    @Column(length = 255)
+    @Column(length = 500)
     private String token;
 
     /**
-     * Date d'expiration du token.
+     * Date de creation.
      */
-    @Column(name = "token_expires_at")
-    private LocalDateTime tokenExpiresAt;
-
-    /**
-     * Date de création du compte.
-     */
-    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     /**
-     * Constructeur vide.
+     * Liste des nonces lies a cet utilisateur.
+     *
+     * Cascade ALL :
+     * si on supprime un user, ses nonces seront aussi supprimes.
+     */
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<AuthNonce> nonces = new ArrayList<>();
+
+    /**
+     * Constructeur par defaut.
      */
     public User() {
     }
 
     /**
-     * Retourne l'identifiant.
-     *
-     * @return id utilisateur
+     * Initialisation avant insertion.
      */
+    @PrePersist
+    public void prePersist() {
+        createdAt = LocalDateTime.now();
+    }
+
     public Long getId() {
         return id;
     }
 
-    /**
-     * Modifie l'identifiant.
-     *
-     * @param id nouvel identifiant
-     */
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    /**
-     * Retourne le nom.
-     *
-     * @return nom utilisateur
-     */
     public String getName() {
         return name;
     }
 
-    /**
-     * Modifie le nom.
-     *
-     * @param name nouveau nom
-     */
     public void setName(String name) {
         this.name = name;
     }
 
-    /**
-     * Retourne l'email.
-     *
-     * @return email utilisateur
-     */
     public String getEmail() {
         return email;
     }
 
-    /**
-     * Modifie l'email.
-     *
-     * @param email nouvel email
-     */
     public void setEmail(String email) {
         this.email = email;
     }
 
-    /**
-     * Retourne le mot de passe chiffré.
-     *
-     * @return mot de passe chiffré
-     */
-    public String getPasswordEncrypted() {
-        return passwordEncrypted;
+    public String getPassword() {
+        return password;
     }
 
     /**
-     * Modifie le mot de passe chiffré.
-     *
-     * @param passwordEncrypted nouvelle valeur chiffrée
+     * Garde le nom setPassword pour ne rien casser
+     * meme si la colonne en base s'appelle password_hash.
      */
-    public void setPasswordEncrypted(String passwordEncrypted) {
-        this.passwordEncrypted = passwordEncrypted;
+    public void setPassword(String password) {
+        this.password = password;
     }
 
-    /**
-     * Retourne le token.
-     *
-     * @return token utilisateur
-     */
     public String getToken() {
         return token;
     }
 
-    /**
-     * Modifie le token.
-     *
-     * @param token nouveau token
-     */
     public void setToken(String token) {
         this.token = token;
     }
 
-    /**
-     * Retourne la date d'expiration du token.
-     *
-     * @return date d'expiration
-     */
-    public LocalDateTime getTokenExpiresAt() {
-        return tokenExpiresAt;
-    }
-
-    /**
-     * Modifie la date d'expiration du token.
-     *
-     * @param tokenExpiresAt nouvelle date d'expiration
-     */
-    public void setTokenExpiresAt(LocalDateTime tokenExpiresAt) {
-        this.tokenExpiresAt = tokenExpiresAt;
-    }
-
-    /**
-     * Retourne la date de création.
-     *
-     * @return date de création
-     */
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
-    /**
-     * Modifie la date de création.
-     *
-     * @param createdAt nouvelle date
-     */
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    public List<AuthNonce> getNonces() {
+        return nonces;
+    }
+
+    public void setNonces(List<AuthNonce> nonces) {
+        this.nonces = nonces;
     }
 }

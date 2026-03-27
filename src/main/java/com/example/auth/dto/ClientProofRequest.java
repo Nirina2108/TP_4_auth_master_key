@@ -1,59 +1,47 @@
 package com.example.auth.dto;
 
 /**
- * DTO utilisé pour simuler le calcul côté client.
- *
- * Ce DTO sert uniquement à construire une preuve HMAC
- * à partir d'un email et d'un mot de passe saisi.
- *
- * @author Poun
- * @version 3.2
+ * DTO pour la preuve client (HMAC).
  */
 public class ClientProofRequest {
 
-    /**
-     * Email de l'utilisateur.
-     */
     private String email;
+    private String nonce;
+    private long timestamp;
+    private String hmac;
 
-    /**
-     * Mot de passe saisi côté client.
-     */
-    private String password;
+    public ClientProofRequest() {
+    }
 
-    /**
-     * Retourne l'email.
-     *
-     * @return email utilisateur
-     */
     public String getEmail() {
         return email;
     }
 
-    /**
-     * Modifie l'email.
-     *
-     * @param email nouvel email
-     */
     public void setEmail(String email) {
         this.email = email;
     }
 
-    /**
-     * Retourne le mot de passe.
-     *
-     * @return mot de passe
-     */
-    public String getPassword() {
-        return password;
+    public String getNonce() {
+        return nonce;
     }
 
-    /**
-     * Modifie le mot de passe.
-     *
-     * @param password nouveau mot de passe
-     */
-    public void setPassword(String password) {
-        this.password = password;
+    public void setNonce(String nonce) {
+        this.nonce = nonce;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(long timestamp) {
+        this.timestamp = timestamp;
+    }
+
+    public String getHmac() {
+        return hmac;
+    }
+
+    public void setHmac(String hmac) {
+        this.hmac = hmac;
     }
 }
