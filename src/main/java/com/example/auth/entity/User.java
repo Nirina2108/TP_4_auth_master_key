@@ -12,17 +12,16 @@ import java.time.LocalDateTime;
 /**
  * Entité représentant un utilisateur.
  *
- * TP3 étape 1 :
- * - mot de passe stocké de façon réversible pour le protocole pédagogique
- * - préparation du futur protocole HMAC
- * - token conservé temporairement pour ne pas casser /api/me
+ * TP4 :
+ * - le mot de passe n'est jamais stocké en clair
+ * - le mot de passe est stocké sous forme chiffrée
+ * - le champ passwordEncrypted contient la valeur protégée
+ * - le token reste utilisé pour les routes protegees comme /api/me
  *
- * Limite importante :
- * ce stockage réversible est pédagogique.
- * En industrie, on préfère un hash non réversible adaptatif.
+ * Cette entité reste simple pour un usage pédagogique.
  *
  * @author Poun
- * @version 3.1
+ * @version 4.0
  */
 @Entity
 @Table(name = "users")
@@ -48,16 +47,16 @@ public class User {
     private String email;
 
     /**
-     * Mot de passe chiffré de manière réversible.
+     * Mot de passe chiffré.
      *
-     * Ce choix est imposé ici pour le TP3 afin que le serveur puisse
-     * retrouver le secret et recalculer le HMAC côté serveur.
+     * La valeur stockée ici est produite par le CryptoService
+     * avec la Master Key du TP4.
      */
     @Column(name = "password_encrypted", nullable = false, length = 500)
     private String passwordEncrypted;
 
     /**
-     * Token simple conservé temporairement pendant la transition vers TP3.
+     * Token d'authentification utilisé pour les appels protégés.
      */
     @Column(length = 255)
     private String token;
