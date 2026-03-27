@@ -17,80 +17,40 @@ import java.util.UUID;
 /**
  * Service contenant la logique métier de l'authentification.
  *
- * TP3 étape 3.3 :
- * - vérification HMAC côté serveur
- * - protection anti-replay avec nonce et timestamp
- * - émission de token temporaire
+ * TP4 :
+ * - HMAC conservé (TP3)
+ * - nonce + timestamp (anti-replay)
+ * - mot de passe chiffré avec CryptoService
  *
  * @author Poun
- * @version 3.3
+ * @version 4.0
  */
 @Service
 public class AuthService {
 
-    /**
-     * Clé standard pour les erreurs dans les réponses.
-     */
     private static final String KEY_ERROR = "error";
-
-    /**
-     * Clé standard pour les messages dans les réponses.
-     */
     private static final String KEY_MESSAGE = "message";
-
-    /**
-     * Durée de vie du token en minutes.
-     */
     private static final int TOKEN_DURATION_MINUTES = 15;
 
-    /**
-     * Repository utilisateur.
-     */
     private final UserRepository userRepository;
-
-    /**
-     * Service de chiffrement réversible.
-     */
-    private final PasswordCryptoService passwordCryptoService;
-
-    /**
-     * Repository des nonces.
-     */
+    private final CryptoService cryptoService;
     private final AuthNonceRepository authNonceRepository;
-
-    /**
-     * Service HMAC.
-     */
     private final HmacService hmacService;
 
-    /**
-     * Validateur de mot de passe.
-     */
     private final PasswordPolicyValidator passwordPolicyValidator = new PasswordPolicyValidator();
 
-    /**
-     * Constructeur du service.
-     *
-     * @param userRepository repository utilisateur
-     * @param passwordCryptoService service de chiffrement
-     * @param authNonceRepository repository des nonces
-     * @param hmacService service HMAC
-     */
     public AuthService(UserRepository userRepository,
-                       PasswordCryptoService passwordCryptoService,
+                       CryptoService cryptoService,
                        AuthNonceRepository authNonceRepository,
                        HmacService hmacService) {
         this.userRepository = userRepository;
-        this.passwordCryptoService = passwordCryptoService;
+        this.cryptoService = cryptoService;
         this.authNonceRepository = authNonceRepository;
         this.hmacService = hmacService;
     }
 
     /**
-     * Inscription d'un utilisateur.
-     *
-     * @param request données d'inscription
-     * @return réponse simple
+     * Inscription utilisateur.
      */
     public Map<String, Object> register(RegisterRequest request) {
         Map<String, Object> response = new HashMap<>();
@@ -108,7 +68,10 @@ public class AuthService {
         User user = new User();
         user.setName(request.getName());
         user.setEmail(request.getEmail());
-        user.setPasswordEncrypted(passwordCryptoService.encrypt(request.getPassword()));
+
+        // TP4 : chiffrement du mot de passe
+        user.setPasswordEncrypted(cryptoService.encrypt(request.getPassword()));
+
         user.setCreatedAt(LocalDateTime.now());
         user.setToken(null);
         user.setTokenExpiresAt(null);
@@ -120,10 +83,7 @@ public class AuthService {
     }
 
     /**
-     * Connexion sécurisée TP3 avec HMAC.
-     *
-     * @param request requête de login
-     * @return réponse avec token ou erreur
+     * Login sécurisé avec HMAC.
      */
     public Map<String, Object> login(LoginRequest request) {
         Map<String, Object> response = new HashMap<>();
@@ -168,7 +128,8 @@ public class AuthService {
             return response;
         }
 
-        String decryptedPassword = passwordCryptoService.decrypt(user.getPasswordEncrypted());
+        // TP4 : déchiffrement du mot de passe
+        String decryptedPassword = cryptoService.decrypt(user.getPasswordEncrypted());
 
         String message = hmacService.buildMessage(
                 request.getEmail(),
@@ -194,12 +155,6 @@ public class AuthService {
         return issueToken(user);
     }
 
-    /**
-     * Retourne les informations de l'utilisateur connecté à partir du token.
-     *
-     * @param authorizationHeader header Authorization
-     * @return informations utilisateur ou erreur
-     */
     public Map<String, Object> getMe(String authorizationHeader) {
         Map<String, Object> response = new HashMap<>();
 
@@ -213,12 +168,12 @@ public class AuthService {
         User user = userRepository.findByToken(token).orElse(null);
 
         if (user == null) {
-            response.put(KEY_ERROR, "Utilisateur non trouvé pour ce token");
+            response.put(KEY_ERROR, "Utilisateur non trouvé");
             return response;
         }
 
         if (user.getTokenExpiresAt() == null || user.getTokenExpiresAt().isBefore(LocalDateTime.now())) {
-            response.put(KEY_ERROR, "Token expiré ou invalide");
+            response.put(KEY_ERROR, "Token expiré");
             return response;
         }
 
@@ -231,17 +186,11 @@ public class AuthService {
         return response;
     }
 
-    /**
-     * Déconnexion d'un utilisateur.
-     *
-     * @param authorizationHeader header Authorization
-     * @return message de confirmation
-     */
     public Map<String, Object> logout(String authorizationHeader) {
         Map<String, Object> response = new HashMap<>();
 
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
-            response.put(KEY_ERROR, "Token manquant ou invalide");
+            response.put(KEY_ERROR, "Token manquant");
             return response;
         }
 
@@ -262,12 +211,6 @@ public class AuthService {
         return response;
     }
 
-    /**
-     * Génère un token pour un utilisateur authentifié.
-     *
-     * @param user utilisateur authentifié
-     * @return réponse avec token
-     */
     public Map<String, Object> issueToken(User user) {
         Map<String, Object> response = new HashMap<>();
 
@@ -286,13 +229,6 @@ public class AuthService {
         return response;
     }
 
-    /**
-     * Compare deux chaînes en temps constant.
-     *
-     * @param a première chaîne
-     * @param b deuxième chaîne
-     * @return true si identiques, sinon false
-     */
     private boolean constantTimeEquals(String a, String b) {
         if (a == null || b == null || a.length() != b.length()) {
             return false;
