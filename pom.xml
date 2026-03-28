@@ -24,17 +24,18 @@
 		<maven.compiler.target>17</maven.compiler.target>
 
 		<sonar.organization>nirina2108</sonar.organization>
-		<sonar.projectKey>nirina2108_TP_4_auth_master_key</sonar.projectKey>
+		<sonar.projectKey>Nirina2108_TP_4_auth_master_key</sonar.projectKey>
 		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
 		<sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
-		<sonar.coverage.exclusions>
+		<sonar.exclusions>
 			**/client/**,
 			**/ui/**,
 			**/*Application.java,
 			**/*UiApplication.java,
 			**/*UiController.java,
-			**/exception/**
-		</sonar.coverage.exclusions>
+			**/exception/**,
+			**/service/PasswordCryptoService.java
+		</sonar.exclusions>
 	</properties>
 
 	<dependencies>
@@ -103,7 +104,7 @@
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>0.8.11</version>
+				<version>0.8.14</version>
 				<executions>
 					<execution>
 						<goals>

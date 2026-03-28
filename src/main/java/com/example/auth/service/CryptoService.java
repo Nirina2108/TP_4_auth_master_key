@@ -5,7 +5,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -27,7 +26,7 @@ import java.util.Base64;
  * AES/GCM/NoPadding
  *
  * @author Poun
- * @version 4.0
+ * @version 4.1
  */
 @Service
 public class CryptoService {
@@ -76,8 +75,8 @@ public class CryptoService {
      */
     @PostConstruct
     public void init() {
-        if (masterKey == null) {
-            masterKey = "default-master-key";
+        if (masterKey == null || masterKey.isBlank()) {
+            throw new IllegalStateException("La master key est obligatoire.");
         }
 
         this.secretKey = buildKeyFromMasterKey(masterKey);
@@ -95,20 +94,11 @@ public class CryptoService {
                 throw new IllegalArgumentException("Le texte a chiffrer ne doit pas etre null.");
             }
 
-            byte[] iv = new byte[IV_LENGTH];
-            SecureRandom secureRandom = new SecureRandom();
-            secureRandom.nextBytes(iv);
+            byte[] iv = generateIv();
+            byte[] encryptedBytes = createCipher(Cipher.ENCRYPT_MODE, iv)
+                    .doFinal(plainText.getBytes(StandardCharsets.UTF_8));
 
-            Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-            GCMParameterSpec gcmParameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey, gcmParameterSpec);
-
-            byte[] encryptedBytes = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
-
-            String ivBase64 = Base64.getEncoder().encodeToString(iv);
-            String cipherBase64 = Base64.getEncoder().encodeToString(encryptedBytes);
-
-            return VERSION + ":" + ivBase64 + ":" + cipherBase64;
+            return buildEncryptedText(iv, encryptedBytes);
         } catch (Exception e) {
             throw new IllegalStateException("Erreur pendant le chiffrement.", e);
         }
@@ -131,23 +121,58 @@ public class CryptoService {
                 throw new IllegalArgumentException("Format du texte chiffre invalide.");
             }
 
-            String version = parts[0];
-            if (!VERSION.equals(version)) {
+            if (!VERSION.equals(parts[0])) {
                 throw new IllegalArgumentException("Version de chiffrement non supportee.");
             }
 
             byte[] iv = Base64.getDecoder().decode(parts[1]);
             byte[] cipherBytes = Base64.getDecoder().decode(parts[2]);
 
-            Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-            GCMParameterSpec gcmParameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
-            cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmParameterSpec);
-
-            byte[] decryptedBytes = cipher.doFinal(cipherBytes);
+            byte[] decryptedBytes = createCipher(Cipher.DECRYPT_MODE, iv).doFinal(cipherBytes);
             return new String(decryptedBytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
             throw new IllegalStateException("Erreur pendant le dechiffrement.", e);
         }
+    }
+
+    /**
+     * Génère un IV aléatoire pour AES/GCM.
+     *
+     * @return iv généré
+     */
+    private byte[] generateIv() {
+        byte[] iv = new byte[IV_LENGTH];
+        SecureRandom secureRandom = new SecureRandom();
+        secureRandom.nextBytes(iv);
+        return iv;
+    }
+
+    /**
+     * Crée un cipher GCM initialisé.
+     *
+     * @param mode mode de chiffrement ou déchiffrement
+     * @param iv vecteur d'initialisation
+     * @return cipher prêt à l'emploi
+     * @throws Exception en cas d'erreur cryptographique
+     */
+    private Cipher createCipher(int mode, byte[] iv) throws Exception {
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        GCMParameterSpec gcmParameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+        cipher.init(mode, secretKey, gcmParameterSpec);
+        return cipher;
+    }
+
+    /**
+     * Construit le texte chiffré final au format TP4.
+     *
+     * @param iv vecteur d'initialisation
+     * @param encryptedBytes données chiffrées
+     * @return texte final stockable
+     */
+    private String buildEncryptedText(byte[] iv, byte[] encryptedBytes) {
+        String ivBase64 = Base64.getEncoder().encodeToString(iv);
+        String cipherBase64 = Base64.getEncoder().encodeToString(encryptedBytes);
+        return VERSION + ":" + ivBase64 + ":" + cipherBase64;
     }
 
     /**
