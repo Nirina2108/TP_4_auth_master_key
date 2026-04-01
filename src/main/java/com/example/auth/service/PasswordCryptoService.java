@@ -4,35 +4,40 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
  * Service de chiffrement réversible des mots de passe.
  *
- * Ce service existe uniquement pour le TP3 afin de permettre au serveur
- * de retrouver le secret utilisateur et de recalculer un HMAC côté serveur.
+ * Utilise AES-GCM qui garantit à la fois la confidentialité
+ * et l'intégrité des données (authenticated encryption).
  *
  * @author Poun
- * @version 3.1
+ * @version 4.0
  */
 @Service
 public class PasswordCryptoService {
 
     /**
-     * Transformation AES utilisée par le service.
-     *
-     * On l'écrit explicitement pour éviter les avertissements Sonar
-     * et garder un comportement clair.
+     * Transformation AES-GCM recommandée par SonarCloud (S5542).
+     * GCM = mode authentifié, NoPadding = requis par GCM.
      */
-    private static final String AES_TRANSFORMATION = "AES/ECB/PKCS5Padding";
+    private static final String AES_TRANSFORMATION = "AES/GCM/NoPadding";
+
+    /**
+     * Taille du GCM Authentication Tag en bits (standard = 128).
+     */
+    private static final int GCM_TAG_LENGTH = 128;
+
+    /**
+     * Taille de l'IV en octets (standard GCM = 12).
+     */
+    private static final int GCM_IV_LENGTH = 12;
 
     /**
      * Clé maître serveur lue depuis application.properties.
@@ -54,51 +59,79 @@ public class PasswordCryptoService {
         byte[] finalKey = new byte[16];
 
         for (int i = 0; i < finalKey.length; i++) {
-            if (i < keyBytes.length) {
-                finalKey[i] = keyBytes[i];
-            } else {
-                finalKey[i] = 0;
-            }
+            finalKey[i] = (i < keyBytes.length) ? keyBytes[i] : 0;
         }
 
         this.secretKeySpec = new SecretKeySpec(finalKey, "AES");
     }
 
     /**
-     * Chiffre un texte en AES puis encode le résultat en Base64.
+     * Chiffre un texte avec AES-GCM.
+     *
+     * L'IV aléatoire (12 bytes) est préfixé au ciphertext,
+     * puis le tout est encodé en Base64 : [IV (12b) | ciphertext]
      *
      * @param plainText texte en clair
      * @return texte chiffré encodé en Base64
      */
     public String encrypt(String plainText) {
         try {
+            // 1. Générer un IV aléatoire unique pour chaque chiffrement
+            byte[] iv = new byte[GCM_IV_LENGTH];
+            new SecureRandom().nextBytes(iv);
+
+            // 2. Initialiser le cipher en mode GCM
             Cipher cipher = Cipher.getInstance(AES_TRANSFORMATION);
-            cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec);
-            byte[] encryptedBytes = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
-            return Base64.getEncoder().encodeToString(encryptedBytes);
-        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException
-                 | IllegalBlockSizeException | BadPaddingException e) {
+            GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+            cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, parameterSpec);
+
+            // 3. Chiffrer
+            byte[] encryptedBytes = cipher.doFinal(
+                    plainText.getBytes(StandardCharsets.UTF_8)
+            );
+
+            // 4. Concaténer IV + ciphertext avant d'encoder en Base64
+            byte[] combined = new byte[GCM_IV_LENGTH + encryptedBytes.length];
+            System.arraycopy(iv, 0, combined, 0, GCM_IV_LENGTH);
+            System.arraycopy(encryptedBytes, 0, combined, GCM_IV_LENGTH, encryptedBytes.length);
+
+            return Base64.getEncoder().encodeToString(combined);
+
+        } catch (Exception e) {
             throw new IllegalStateException("Erreur pendant le chiffrement du mot de passe", e);
         }
     }
 
     /**
-     * Déchiffre un texte Base64 chiffré en AES.
+     * Déchiffre un texte Base64 chiffré avec AES-GCM.
      *
-     * @param encryptedText texte chiffré en Base64
+     * Extrait d'abord l'IV (12 premiers bytes), puis déchiffre le reste.
+     *
+     * @param encryptedText texte chiffré en Base64 (format: IV | ciphertext)
      * @return texte en clair
      */
     public String decrypt(String encryptedText) {
         try {
+            // 1. Décoder le Base64
+            byte[] combined = Base64.getDecoder().decode(encryptedText);
+
+            // 2. Extraire l'IV (12 premiers bytes)
+            byte[] iv = new byte[GCM_IV_LENGTH];
+            System.arraycopy(combined, 0, iv, 0, GCM_IV_LENGTH);
+
+            // 3. Extraire le ciphertext (le reste)
+            byte[] cipherText = new byte[combined.length - GCM_IV_LENGTH];
+            System.arraycopy(combined, GCM_IV_LENGTH, cipherText, 0, cipherText.length);
+
+            // 4. Déchiffrer
             Cipher cipher = Cipher.getInstance(AES_TRANSFORMATION);
-            cipher.init(Cipher.DECRYPT_MODE, secretKeySpec);
-            byte[] decodedBytes = Base64.getDecoder().decode(encryptedText);
-            byte[] decryptedBytes = cipher.doFinal(decodedBytes);
+            GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+            cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, parameterSpec);
+
+            byte[] decryptedBytes = cipher.doFinal(cipherText);
             return new String(decryptedBytes, StandardCharsets.UTF_8);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalStateException("Texte chiffré invalide", e);
-        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException
-                 | IllegalBlockSizeException | BadPaddingException e) {
+
+        } catch (Exception e) {
             throw new IllegalStateException("Erreur pendant le déchiffrement du mot de passe", e);
         }
     }
