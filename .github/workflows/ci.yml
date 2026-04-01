@@ -5,9 +5,6 @@ on:
     branches:
       - main
       - tp4-dev
-  pull_request:
-    branches:
-      - main
 
 jobs:
   build-and-sonar:
@@ -26,31 +23,28 @@ jobs:
           java-version: 17
           cache: maven
 
-      - name: Donner les droits au mvnw
+      - name: Donner les droits au wrapper Maven
         run: chmod +x mvnw
 
-      - name: Build + Tests
+      - name: Compiler et tester
         run: ./mvnw clean verify
 
       - name: Verifier SONAR_TOKEN
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          if [ -z "$SONAR_TOKEN" ]; then
-            echo "SONAR_TOKEN manquant dans GitHub Actions"
+          if [ -z "${{ secrets.SONAR_TOKEN }}" ]; then
+            echo "SONAR_TOKEN manquant"
             exit 1
           else
-            echo "SONAR_TOKEN charge correctement"
+            echo "SONAR_TOKEN present"
           fi
 
       - name: Analyse SonarCloud
+        uses: SonarSource/sonarqube-scan-action@v4
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          ./mvnw sonar:sonar \
-            -Dsonar.projectKey=Nirina2108_TP_4_auth_master_key \
-            -Dsonar.organization=nirina2108 \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.token="$SONAR_TOKEN" \
-            -Dsonar.qualitygate.wait=true \
+        with:
+          args: >
+            -Dsonar.projectKey=Nirina2108_TP_4_auth_master_key
+            -Dsonar.organization=nirina2108
+            -Dsonar.host.url=https://sonarcloud.io
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
