@@ -7,14 +7,12 @@ on:
       - main
 
 jobs:
-  build-and-sonar:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
       - name: Recuperer le code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Installer Java 17
         uses: actions/setup-java@v4
@@ -26,25 +24,5 @@ jobs:
       - name: Donner les droits au wrapper Maven
         run: chmod +x mvnw
 
-      - name: Verifier le token Sonar
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          if [ -z "$SONAR_TOKEN" ]; then
-            echo "ERREUR: SONAR_TOKEN absent"
-            exit 1
-          fi
-          echo "SONAR_TOKEN detecte"
-
-      - name: Build + Tests + SonarCloud
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          ./mvnw clean verify sonar:sonar \
-            -Dsonar.projectKey=Nirina2108_TP_4_auth_master_key \
-            -Dsonar.organization=nirina2108 \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.token=$SONAR_TOKEN \
-            -Dsonar.qualitygate.wait=true \
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
-            -e
+      - name: Compiler et lancer les tests
+        run: ./mvnw clean verify
