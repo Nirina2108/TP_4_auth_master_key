@@ -1,227 +1,106 @@
 package com.example.auth.controller;
 
-import com.example.auth.AuthApplication;
+import com.example.auth.dto.ClientProofRequest;
+import com.example.auth.dto.ClientProofResponse;
 import com.example.auth.dto.LoginRequest;
 import com.example.auth.dto.RegisterRequest;
-import com.example.auth.service.HmacService;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.Assertions;
+import com.example.auth.service.AuthService;
+import com.example.auth.service.ClientProofService;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 /**
- * Tests du controller d'authentification.
- *
- * Ces tests vérifient surtout le contenu renvoyé par les endpoints.
+ * Tests unitaires de AuthController.
  *
  * @author Poun
- * @version 3.2
+ * @version 1.0
  */
-@SpringBootTest(classes = AuthApplication.class)
-@AutoConfigureMockMvc
-@ActiveProfiles("test")
+@ExtendWith(MockitoExtension.class)
 public class AuthControllerTest {
 
-    /**
-     * URL de base.
-     */
-    private static final String URL = "/api/auth";
+    @Mock
+    private AuthService authService;
 
-    /**
-     * Outil MockMvc.
-     */
-    @Autowired
-    private MockMvc mockMvc;
+    @Mock
+    private ClientProofService clientProofService;
 
-    /**
-     * Convertisseur JSON.
-     */
-    @Autowired
-    private ObjectMapper objectMapper;
+    @InjectMocks
+    private AuthController authController;
 
-    /**
-     * Service HMAC.
-     */
-    @Autowired
-    private HmacService hmacService;
-
-    /**
-     * Construit une requête d'inscription.
-     *
-     * @param email email utilisateur
-     * @return requête d'inscription
-     */
-    private RegisterRequest buildRegister(String email) {
+    @Test
+    void testRegister() {
         RegisterRequest request = new RegisterRequest();
-        request.setName("Test");
-        request.setEmail(email);
-        request.setPassword("Azerty1234!@");
-        return request;
+        Map<String, Object> expected = new HashMap<>();
+        expected.put("message", "Inscription réussie");
+
+        when(authService.register(request)).thenReturn(expected);
+
+        Map<String, Object> result = authController.register(request);
+
+        assertEquals(expected, result);
+        verify(authService).register(request);
     }
 
-    /**
-     * Construit une requête de connexion valide.
-     *
-     * @param email email utilisateur
-     * @return requête login
-     */
-    private LoginRequest buildLogin(String email) {
-        long timestamp = System.currentTimeMillis() / 1000;
-        String nonce = "nonce-" + System.nanoTime();
-        String message = email + ":" + nonce + ":" + timestamp;
-
-        String hmac = hmacService.hmacSha256("Azerty1234!@", message);
-
+    @Test
+    void testLogin() {
         LoginRequest request = new LoginRequest();
-        request.setEmail(email);
-        request.setNonce(nonce);
-        request.setTimestamp(timestamp);
-        request.setHmac(hmac);
+        Map<String, Object> expected = new HashMap<>();
+        expected.put("message", "Connexion réussie");
 
-        return request;
+        when(authService.login(request)).thenReturn(expected);
+
+        Map<String, Object> result = authController.login(request);
+
+        assertEquals(expected, result);
+        verify(authService).login(request);
     }
 
-    /**
-     * Teste une inscription valide.
-     *
-     * @throws Exception si erreur
-     */
     @Test
-    void testRegisterOK() throws Exception {
-        RegisterRequest request = buildRegister("test1@gmail.com");
+    void testBuildClientProof() {
+        ClientProofRequest request = new ClientProofRequest();
+        ClientProofResponse response = new ClientProofResponse();
+        response.setEmail("test@mail.com");
 
-        MvcResult result = mockMvc.perform(
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(URL + "/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-        ).andReturn();
+        when(clientProofService.buildProof(request)).thenReturn(response);
 
-        String response = result.getResponse().getContentAsString();
+        ClientProofResponse result = authController.buildClientProof(request);
 
-        Assertions.assertTrue(response.contains("Inscription"));
+        assertEquals("test@mail.com", result.getEmail());
+        verify(clientProofService).buildProof(request);
     }
 
-    /**
-     * Teste une inscription avec email déjà utilisé.
-     *
-     * @throws Exception si erreur
-     */
     @Test
-    void testRegisterDuplicate() throws Exception {
-        RegisterRequest request = buildRegister("dup@gmail.com");
+    void testMe() {
+        Map<String, Object> expected = new HashMap<>();
+        expected.put("email", "test@mail.com");
 
-        mockMvc.perform(
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(URL + "/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-        ).andReturn();
+        when(authService.getMe("Bearer token123")).thenReturn(expected);
 
-        MvcResult result = mockMvc.perform(
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(URL + "/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-        ).andReturn();
+        Map<String, Object> result = authController.me("Bearer token123");
 
-        String response = result.getResponse().getContentAsString();
-
-        Assertions.assertTrue(response.contains("Email déjà utilisé")
-                || response.contains("Email deja utilise"));
+        assertEquals(expected, result);
+        verify(authService).getMe("Bearer token123");
     }
 
-    /**
-     * Teste une connexion valide.
-     *
-     * @throws Exception si erreur
-     */
     @Test
-    void testLoginOK() throws Exception {
-        String email = "login@gmail.com";
+    void testLogout() {
+        Map<String, Object> expected = new HashMap<>();
+        expected.put("message", "Déconnexion réussie");
 
-        mockMvc.perform(
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(URL + "/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(buildRegister(email)))
-        ).andReturn();
+        when(authService.logout("Bearer token123")).thenReturn(expected);
 
-        MvcResult result = mockMvc.perform(
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(URL + "/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(buildLogin(email)))
-        ).andReturn();
+        Map<String, Object> result = authController.logout("Bearer token123");
 
-        String response = result.getResponse().getContentAsString();
-
-        Assertions.assertTrue(response.contains("Connexion réussie")
-                || response.contains("Connexion reussie"));
-        Assertions.assertTrue(response.contains("accessToken"));
-    }
-
-    /**
-     * Teste une connexion avec HMAC invalide.
-     *
-     * @throws Exception si erreur
-     */
-    @Test
-    void testLoginInvalidHmac() throws Exception {
-        String email = "fail@gmail.com";
-
-        mockMvc.perform(
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(URL + "/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(buildRegister(email)))
-        ).andReturn();
-
-        LoginRequest request = buildLogin(email);
-        request.setHmac("fake");
-
-        MvcResult result = mockMvc.perform(
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(URL + "/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-        ).andReturn();
-
-        String response = result.getResponse().getContentAsString();
-
-        Assertions.assertTrue(response.contains("HMAC invalide"));
-    }
-
-    /**
-     * Teste /me sans token.
-     *
-     * @throws Exception si erreur
-     */
-    @Test
-    void testMeWithoutToken() throws Exception {
-        MvcResult result = mockMvc.perform(
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(URL + "/me")
-        ).andReturn();
-
-        String response = result.getResponse().getContentAsString();
-
-        Assertions.assertTrue(response.contains("Token manquant")
-                || response.contains("Token manquant ou invalide"));
-    }
-
-    /**
-     * Teste logout sans token.
-     *
-     * @throws Exception si erreur
-     */
-    @Test
-    void testLogoutWithoutToken() throws Exception {
-        MvcResult result = mockMvc.perform(
-                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(URL + "/logout")
-        ).andReturn();
-
-        String response = result.getResponse().getContentAsString();
-
-        Assertions.assertTrue(response.contains("Token manquant")
-                || response.contains("Token manquant ou invalide"));
+        assertEquals(expected, result);
+        verify(authService).logout("Bearer token123");
     }
 }

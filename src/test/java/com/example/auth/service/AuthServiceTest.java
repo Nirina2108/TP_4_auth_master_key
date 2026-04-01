@@ -1,698 +1,359 @@
 package com.example.auth.service;
 
-import com.example.auth.AuthApplication;
-import com.example.auth.dto.ClientProofRequest;
-import com.example.auth.dto.ClientProofResponse;
 import com.example.auth.dto.LoginRequest;
 import com.example.auth.dto.RegisterRequest;
+import com.example.auth.entity.AuthNonce;
 import com.example.auth.entity.User;
 import com.example.auth.repository.AuthNonceRepository;
 import com.example.auth.repository.UserRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 /**
- * Tests du service d'authentification TP3.
- *
- * Cas couverts :
- * - inscription
- * - login HMAC valide
- * - login HMAC invalide
- * - timestamp expiré
- * - timestamp futur
- * - nonce déjà utilisé
- * - utilisateur inconnu
- * - /me avec et sans token
- * - logout
+ * Tests unitaires de AuthService.
  *
  * @author Poun
- * @version 3.5
+ * @version 1.0
  */
-@SpringBootTest(classes = AuthApplication.class)
-@ActiveProfiles("test")
+@ExtendWith(MockitoExtension.class)
 public class AuthServiceTest {
 
-    /**
-     * Service principal.
-     */
-    @Autowired
-    private AuthService authService;
-
-    /**
-     * Service de simulation client.
-     */
-    @Autowired
-    private ClientProofService clientProofService;
-
-    /**
-     * Repository utilisateur.
-     */
-    @Autowired
+    @Mock
     private UserRepository userRepository;
 
-    /**
-     * Repository nonce.
-     */
-    @Autowired
+    @Mock
+    private PasswordCryptoService passwordCryptoService;
+
+    @Mock
     private AuthNonceRepository authNonceRepository;
 
-    /**
-     * Nettoyage avant chaque test.
-     */
-    @BeforeEach
-    void setUp() {
-        authNonceRepository.deleteAll();
-        userRepository.deleteAll();
-    }
+    @Mock
+    private HmacService hmacService;
 
-    /**
-     * Crée un utilisateur de test.
-     */
-    private void registerDefaultUser() {
-        RegisterRequest request = new RegisterRequest();
-        request.setName("Poun");
-        request.setEmail("poun@gmail.com");
-        request.setPassword("Azerty1234!@");
-        authService.register(request);
-    }
+    @InjectMocks
+    private AuthService authService;
 
-    /**
-     * Construit une preuve valide.
-     *
-     * @return preuve client valide
-     */
-    private ClientProofResponse buildValidProof() {
-        ClientProofRequest request = new ClientProofRequest();
-        request.setEmail("poun@gmail.com");
-        request.setPassword("Azerty1234!@");
-        return clientProofService.buildProof(request);
-    }
-
-    /**
-     * Transforme une preuve client en LoginRequest.
-     *
-     * @param proof preuve client
-     * @return requête login
-     */
-    private LoginRequest toLoginRequest(ClientProofResponse proof) {
-        LoginRequest loginRequest = new LoginRequest();
-        loginRequest.setEmail(proof.getEmail());
-        loginRequest.setNonce(proof.getNonce());
-        loginRequest.setTimestamp(proof.getTimestamp());
-        loginRequest.setHmac(proof.getHmac());
-        return loginRequest;
-    }
-
-    /**
-     * Teste une inscription valide.
-     */
     @Test
-    void testRegisterSuccess() {
+    void testRegisterPasswordNull() {
         RegisterRequest request = new RegisterRequest();
         request.setName("Poun");
-        request.setEmail("poun@gmail.com");
-        request.setPassword("Azerty1234!@");
+        request.setEmail("poun@mail.com");
+        request.setPassword(null);
 
         Map<String, Object> response = authService.register(request);
 
-        Assertions.assertEquals("Inscription réussie", response.get("message"));
-        Assertions.assertTrue(userRepository.findByEmail("poun@gmail.com").isPresent());
+        assertTrue(response.containsKey("error"));
     }
 
-    /**
-     * Teste une inscription avec email déjà utilisé.
-     */
     @Test
-    void testRegisterDuplicateEmail() {
-        registerDefaultUser();
-
-        RegisterRequest request = new RegisterRequest();
-        request.setName("Autre");
-        request.setEmail("poun@gmail.com");
-        request.setPassword("Azerty1234!@");
-
-        Map<String, Object> response = authService.register(request);
-
-        Assertions.assertEquals("Email déjà utilisé", response.get("error"));
-    }
-
-    /**
-     * Teste une inscription avec mot de passe faible.
-     */
-    @Test
-    void testRegisterWeakPassword() {
+    void testRegisterPasswordInvalid() {
         RegisterRequest request = new RegisterRequest();
         request.setName("Poun");
-        request.setEmail("poun@gmail.com");
+        request.setEmail("poun@mail.com");
         request.setPassword("123");
 
         Map<String, Object> response = authService.register(request);
 
-        Assertions.assertNotNull(response.get("error"));
+        assertTrue(response.containsKey("error"));
     }
 
-    /**
-     * Teste le login avec HMAC valide.
-     */
     @Test
-    void testLoginOkWithValidHmac() {
-        registerDefaultUser();
-        ClientProofResponse proof = buildValidProof();
+    void testRegisterEmailAlreadyUsed() {
+        RegisterRequest request = new RegisterRequest();
+        request.setName("Poun");
+        request.setEmail("poun@mail.com");
+        request.setPassword("Password123!");
 
-        Map<String, Object> response = authService.login(toLoginRequest(proof));
+        User user = new User();
 
-        Assertions.assertEquals("Connexion réussie", response.get("message"));
-        Assertions.assertNotNull(response.get("accessToken"));
-        Assertions.assertEquals("poun@gmail.com", response.get("email"));
-        Assertions.assertNotNull(response.get("expiresAt"));
+        when(userRepository.findByEmail("poun@mail.com")).thenReturn(Optional.of(user));
+
+        Map<String, Object> response = authService.register(request);
+
+        assertEquals("Email déjà utilisé", response.get("error"));
     }
 
-    /**
-     * Teste le login avec HMAC invalide.
-     */
     @Test
-    void testLoginKoInvalidHmac() {
-        registerDefaultUser();
-        ClientProofResponse proof = buildValidProof();
+    void testRegisterSuccess() {
+        RegisterRequest request = new RegisterRequest();
+        request.setName("Poun");
+        request.setEmail("poun@mail.com");
+        request.setPassword("Password123!");
 
-        LoginRequest loginRequest = toLoginRequest(proof);
-        loginRequest.setHmac("hmac-faux");
+        when(userRepository.findByEmail("poun@mail.com")).thenReturn(Optional.empty());
+        when(passwordCryptoService.encrypt("Password123!")).thenReturn("encrypted-password");
 
-        Map<String, Object> response = authService.login(loginRequest);
+        Map<String, Object> response = authService.register(request);
 
-        Assertions.assertEquals("HMAC invalide", response.get("error"));
+        assertEquals("Inscription réussie", response.get("message"));
+        verify(userRepository).save(any(User.class));
     }
 
-    /**
-     * Teste le login avec timestamp expiré.
-     */
     @Test
-    void testLoginKoExpiredTimestamp() {
-        registerDefaultUser();
-        ClientProofResponse proof = buildValidProof();
-
-        LoginRequest loginRequest = toLoginRequest(proof);
-        loginRequest.setTimestamp((System.currentTimeMillis() / 1000) - 1000);
-
-        Map<String, Object> response = authService.login(loginRequest);
-
-        Assertions.assertEquals("Requête expirée", response.get("error"));
-    }
-
-    /**
-     * Teste le login avec timestamp futur.
-     */
-    @Test
-    void testLoginKoFutureTimestamp() {
-        registerDefaultUser();
-        ClientProofResponse proof = buildValidProof();
-
-        LoginRequest loginRequest = toLoginRequest(proof);
-        loginRequest.setTimestamp((System.currentTimeMillis() / 1000) + 1000);
-
-        Map<String, Object> response = authService.login(loginRequest);
-
-        Assertions.assertEquals("Requête expirée", response.get("error"));
-    }
-
-    /**
-     * Teste le login avec nonce déjà utilisé.
-     */
-    @Test
-    void testLoginKoNonceAlreadyUsed() {
-        registerDefaultUser();
-        ClientProofResponse proof = buildValidProof();
-
-        LoginRequest firstLogin = toLoginRequest(proof);
-        Map<String, Object> firstResponse = authService.login(firstLogin);
-
-        Assertions.assertEquals("Connexion réussie", firstResponse.get("message"));
-
-        LoginRequest secondLogin = toLoginRequest(proof);
-        Map<String, Object> secondResponse = authService.login(secondLogin);
-
-        Assertions.assertEquals("Nonce déjà utilisé", secondResponse.get("error"));
-    }
-
-    /**
-     * Teste le login avec utilisateur inconnu.
-     */
-    @Test
-    void testLoginKoUnknownUser() {
-        ClientProofRequest request = new ClientProofRequest();
-        request.setEmail("inconnu@gmail.com");
-        request.setPassword("Azerty1234!@");
-
-        ClientProofResponse proof = clientProofService.buildProof(request);
-
-        Map<String, Object> response = authService.login(toLoginRequest(proof));
-
-        Assertions.assertEquals("Utilisateur introuvable", response.get("error"));
-    }
-
-    /**
-     * Teste le login sans email.
-     */
-    @Test
-    void testLoginKoWithoutEmail() {
+    void testLoginEmailMissing() {
         LoginRequest request = new LoginRequest();
-        request.setNonce("nonce-test");
-        request.setTimestamp(System.currentTimeMillis() / 1000);
+        request.setEmail(null);
+        request.setNonce("nonce");
+        request.setTimestamp(1700000000L);
         request.setHmac("abc");
 
         Map<String, Object> response = authService.login(request);
 
-        Assertions.assertEquals("Email obligatoire", response.get("error"));
+        assertEquals("Email obligatoire", response.get("error"));
     }
 
-    /**
-     * Teste le login sans nonce.
-     */
     @Test
-    void testLoginKoWithoutNonce() {
+    void testLoginNonceMissing() {
         LoginRequest request = new LoginRequest();
-        request.setEmail("poun@gmail.com");
-        request.setTimestamp(System.currentTimeMillis() / 1000);
+        request.setEmail("test@mail.com");
+        request.setNonce(null);
+        request.setTimestamp(1700000000L);
         request.setHmac("abc");
 
         Map<String, Object> response = authService.login(request);
 
-        Assertions.assertEquals("Nonce obligatoire", response.get("error"));
+        assertEquals("Nonce obligatoire", response.get("error"));
     }
 
-    /**
-     * Teste le login sans timestamp.
-     */
     @Test
-    void testLoginKoWithoutTimestamp() {
+    void testLoginTimestampMissing() {
         LoginRequest request = new LoginRequest();
-        request.setEmail("poun@gmail.com");
-        request.setNonce("nonce-test");
+        request.setEmail("test@mail.com");
+        request.setNonce("nonce");
+        request.setTimestamp(0);
         request.setHmac("abc");
 
         Map<String, Object> response = authService.login(request);
 
-        Assertions.assertEquals("Timestamp obligatoire", response.get("error"));
+        assertEquals("Timestamp obligatoire", response.get("error"));
     }
 
-    /**
-     * Teste le login sans HMAC.
-     */
     @Test
-    void testLoginKoWithoutHmac() {
+    void testLoginHmacMissing() {
         LoginRequest request = new LoginRequest();
-        request.setEmail("poun@gmail.com");
-        request.setNonce("nonce-test");
-        request.setTimestamp(System.currentTimeMillis() / 1000);
+        request.setEmail("test@mail.com");
+        request.setNonce("nonce");
+        request.setTimestamp(1700000000L);
+        request.setHmac(null);
 
         Map<String, Object> response = authService.login(request);
 
-        Assertions.assertEquals("HMAC obligatoire", response.get("error"));
+        assertEquals("HMAC obligatoire", response.get("error"));
     }
 
-    /**
-     * Teste /me avec token valide.
-     */
     @Test
-    void testGetMeOkWithToken() {
-        registerDefaultUser();
-        ClientProofResponse proof = buildValidProof();
+    void testLoginUserNotFound() {
+        LoginRequest request = new LoginRequest();
+        request.setEmail("notfound@mail.com");
+        request.setNonce("nonce");
+        request.setTimestamp(System.currentTimeMillis() / 1000);
+        request.setHmac("abc");
 
-        Map<String, Object> loginResponse = authService.login(toLoginRequest(proof));
-        String token = (String) loginResponse.get("accessToken");
+        when(userRepository.findByEmail("notfound@mail.com")).thenReturn(Optional.empty());
 
-        Map<String, Object> meResponse = authService.getMe("Bearer " + token);
+        Map<String, Object> response = authService.login(request);
 
-        Assertions.assertEquals("Poun", meResponse.get("name"));
-        Assertions.assertEquals("poun@gmail.com", meResponse.get("email"));
-        Assertions.assertNotNull(meResponse.get("tokenExpiresAt"));
+        assertEquals("Utilisateur introuvable", response.get("error"));
     }
 
-    /**
-     * Teste /me sans token.
-     */
     @Test
-    void testGetMeKoWithoutToken() {
+    void testLoginExpiredRequest() {
+        LoginRequest request = new LoginRequest();
+        request.setEmail("test@mail.com");
+        request.setNonce("nonce");
+        request.setTimestamp((System.currentTimeMillis() / 1000) - 1000);
+        request.setHmac("abc");
+
+        User user = new User();
+        when(userRepository.findByEmail("test@mail.com")).thenReturn(Optional.of(user));
+
+        Map<String, Object> response = authService.login(request);
+
+        assertEquals("Requête expirée", response.get("error"));
+    }
+
+    @Test
+    void testLoginNonceAlreadyUsed() {
+        LoginRequest request = new LoginRequest();
+        request.setEmail("test@mail.com");
+        request.setNonce("nonce123");
+        request.setTimestamp(System.currentTimeMillis() / 1000);
+        request.setHmac("abc");
+
+        User user = new User();
+        when(userRepository.findByEmail("test@mail.com")).thenReturn(Optional.of(user));
+        when(authNonceRepository.findByUserAndNonce(user, "nonce123"))
+                .thenReturn(Optional.of(new AuthNonce()));
+
+        Map<String, Object> response = authService.login(request);
+
+        assertEquals("Nonce déjà utilisé", response.get("error"));
+    }
+
+    @Test
+    void testLoginInvalidHmac() {
+        long now = System.currentTimeMillis() / 1000;
+
+        LoginRequest request = new LoginRequest();
+        request.setEmail("test@mail.com");
+        request.setNonce("nonce123");
+        request.setTimestamp(now);
+        request.setHmac("bad-hmac");
+
+        User user = new User();
+        user.setPasswordEncrypted("encrypted");
+
+        when(userRepository.findByEmail("test@mail.com")).thenReturn(Optional.of(user));
+        when(authNonceRepository.findByUserAndNonce(user, "nonce123")).thenReturn(Optional.empty());
+        when(passwordCryptoService.decrypt("encrypted")).thenReturn("Password123!");
+
+        String message = "test@mail.com:nonce123:" + now;
+        when(hmacService.buildMessage("test@mail.com", "nonce123", now)).thenReturn(message);
+        when(hmacService.hmacSha256("Password123!", message)).thenReturn("good-hmac");
+
+        Map<String, Object> response = authService.login(request);
+
+        assertEquals("HMAC invalide", response.get("error"));
+    }
+
+    @Test
+    void testLoginSuccess() {
+        long now = System.currentTimeMillis() / 1000;
+
+        LoginRequest request = new LoginRequest();
+        request.setEmail("test@mail.com");
+        request.setNonce("nonce123");
+        request.setTimestamp(now);
+        request.setHmac("good-hmac");
+
+        User user = new User();
+        user.setEmail("test@mail.com");
+        user.setPasswordEncrypted("encrypted-password");
+
+        when(userRepository.findByEmail("test@mail.com")).thenReturn(Optional.of(user));
+        when(authNonceRepository.findByUserAndNonce(user, "nonce123")).thenReturn(Optional.empty());
+        when(passwordCryptoService.decrypt("encrypted-password")).thenReturn("Password123!");
+
+        String message = "test@mail.com:nonce123:" + now;
+        when(hmacService.buildMessage("test@mail.com", "nonce123", now)).thenReturn(message);
+        when(hmacService.hmacSha256("Password123!", message)).thenReturn("good-hmac");
+
+        Map<String, Object> response = authService.login(request);
+
+        assertEquals("Connexion réussie", response.get("message"));
+        assertNotNull(response.get("accessToken"));
+        assertEquals("test@mail.com", response.get("email"));
+
+        verify(authNonceRepository).save(any(AuthNonce.class));
+        verify(userRepository, atLeastOnce()).save(user);
+    }
+
+    @Test
+    void testGetMeTokenMissing() {
         Map<String, Object> response = authService.getMe(null);
 
-        Assertions.assertEquals("Token manquant ou invalide", response.get("error"));
+        assertEquals("Token manquant ou invalide", response.get("error"));
     }
 
-    /**
-     * Teste /me avec token invalide.
-     */
     @Test
-    void testGetMeKoUnknownToken() {
-        Map<String, Object> response = authService.getMe("Bearer token-inconnu");
+    void testGetMeUserNotFound() {
+        when(userRepository.findByToken("bad-token")).thenReturn(Optional.empty());
 
-        Assertions.assertEquals("Utilisateur non trouvé pour ce token", response.get("error"));
+        Map<String, Object> response = authService.getMe("Bearer bad-token");
+
+        assertEquals("Utilisateur non trouvé pour ce token", response.get("error"));
     }
 
-    /**
-     * Teste /me avec token expiré.
-     */
     @Test
-    void testGetMeKoExpiredToken() {
-        registerDefaultUser();
-
-        User user = userRepository.findByEmail("poun@gmail.com").orElseThrow();
-        user.setToken("token-expire");
+    void testGetMeTokenExpired() {
+        User user = new User();
+        user.setToken("token123");
         user.setTokenExpiresAt(LocalDateTime.now().minusMinutes(1));
-        userRepository.save(user);
 
-        Map<String, Object> response = authService.getMe("Bearer token-expire");
+        when(userRepository.findByToken("token123")).thenReturn(Optional.of(user));
 
-        Assertions.assertEquals("Token expiré ou invalide", response.get("error"));
+        Map<String, Object> response = authService.getMe("Bearer token123");
+
+        assertEquals("Token expiré ou invalide", response.get("error"));
     }
 
-    /**
-     * Teste logout avec token valide.
-     */
     @Test
-    void testLogoutOk() {
-        registerDefaultUser();
-        ClientProofResponse proof = buildValidProof();
+    void testGetMeSuccess() {
+        User user = new User();
+        user.setId(1L);
+        user.setName("Poun");
+        user.setEmail("poun@mail.com");
+        user.setCreatedAt(LocalDateTime.now());
+        user.setToken("token123");
+        user.setTokenExpiresAt(LocalDateTime.now().plusMinutes(10));
 
-        Map<String, Object> loginResponse = authService.login(toLoginRequest(proof));
-        String token = (String) loginResponse.get("accessToken");
+        when(userRepository.findByToken("token123")).thenReturn(Optional.of(user));
 
-        Map<String, Object> logoutResponse = authService.logout("Bearer " + token);
+        Map<String, Object> response = authService.getMe("Bearer token123");
 
-        Assertions.assertEquals("Déconnexion réussie", logoutResponse.get("message"));
-
-        User user = userRepository.findByEmail("poun@gmail.com").orElseThrow();
-        Assertions.assertNull(user.getToken());
-        Assertions.assertNull(user.getTokenExpiresAt());
+        assertEquals(1L, response.get("id"));
+        assertEquals("Poun", response.get("name"));
+        assertEquals("poun@mail.com", response.get("email"));
     }
 
-    /**
-     * Teste logout sans token.
-     */
     @Test
-    void testLogoutKoWithoutToken() {
+    void testLogoutTokenMissing() {
         Map<String, Object> response = authService.logout(null);
 
-        Assertions.assertEquals("Token manquant ou invalide", response.get("error"));
+        assertEquals("Token manquant ou invalide", response.get("error"));
     }
 
-    /**
-     * Teste logout avec token inconnu.
-     */
     @Test
-    void testLogoutKoUnknownToken() {
-        Map<String, Object> response = authService.logout("Bearer token-inconnu");
+    void testLogoutUserNotFound() {
+        when(userRepository.findByToken("bad-token")).thenReturn(Optional.empty());
 
-        Assertions.assertEquals("Utilisateur non trouvé", response.get("error"));
+        Map<String, Object> response = authService.logout("Bearer bad-token");
+
+        assertEquals("Utilisateur non trouvé", response.get("error"));
     }
 
-    /**
-     * Teste un login avec utilisateur invalide.
-     */
     @Test
-    void testLoginWithInvalidUser() {
-        LoginRequest request = new LoginRequest();
-        request.setEmail("fake@gmail.com");
-        request.setNonce("test-nonce");
-        request.setTimestamp(System.currentTimeMillis() / 1000);
-        request.setHmac("fake-hmac");
+    void testLogoutSuccess() {
+        User user = new User();
+        user.setToken("token123");
+        user.setTokenExpiresAt(LocalDateTime.now().plusMinutes(10));
 
-        Map<String, Object> response = authService.login(request);
+        when(userRepository.findByToken("token123")).thenReturn(Optional.of(user));
 
-        Assertions.assertTrue(response.containsKey("error"));
+        Map<String, Object> response = authService.logout("Bearer token123");
+
+        assertEquals("Déconnexion réussie", response.get("message"));
+        assertNull(user.getToken());
+        assertNull(user.getTokenExpiresAt());
+        verify(userRepository).save(user);
     }
 
-    /**
-     * Teste un login avec HMAC faux.
-     */
     @Test
-    void testLoginWrongPassword() {
-        RegisterRequest r = new RegisterRequest();
-        r.setName("Test");
-        r.setEmail("test@gmail.com");
-        r.setPassword("Azerty1234!");
-        authService.register(r);
+    void testIssueToken() {
+        User user = new User();
+        user.setEmail("poun@mail.com");
 
-        LoginRequest request = new LoginRequest();
-        request.setEmail("test@gmail.com");
-        request.setNonce("test-nonce");
-        request.setTimestamp(System.currentTimeMillis() / 1000);
-        request.setHmac("fake-hmac");
+        Map<String, Object> response = authService.issueToken(user);
 
-        Map<String, Object> response = authService.login(request);
+        assertEquals("Connexion réussie", response.get("message"));
+        assertEquals("poun@mail.com", response.get("email"));
+        assertNotNull(response.get("accessToken"));
+        assertNotNull(response.get("expiresAt"));
 
-        Assertions.assertTrue(response.containsKey("error"));
-    }
-
-    /**
-     * Tests du contrôleur d'authentification TP3.
-     *
-     * @author Poun
-     * @version 3.1
-     */
-    @SpringBootTest(classes = AuthApplication.class)
-    @AutoConfigureMockMvc
-    @ActiveProfiles("test")
-    static class AuthControllerTest {
-
-        /**
-         * URL de base des routes d'authentification.
-         */
-        private static final String AUTH_URL = "/api/auth";
-
-        /**
-         * Outil pour convertir objet Java en JSON.
-         */
-        @Autowired
-        private ObjectMapper objectMapper;
-
-        /**
-         * Outil pour simuler les appels HTTP.
-         */
-        @Autowired
-        private MockMvc mockMvc;
-
-        /**
-         * Service HMAC utilisé pour générer la signature dans les tests.
-         */
-        @Autowired
-        private HmacService hmacService;
-
-        /**
-         * Crée une requête d'inscription.
-         *
-         * @param name nom
-         * @param email email
-         * @param password mot de passe
-         * @return objet RegisterRequest
-         */
-        private RegisterRequest buildRegisterRequest(String name, String email, String password) {
-            RegisterRequest request = new RegisterRequest();
-            request.setName(name);
-            request.setEmail(email);
-            request.setPassword(password);
-            return request;
-        }
-
-        /**
-         * Crée une requête de connexion TP3.
-         *
-         * @param email email utilisateur
-         * @param password mot de passe utilisateur
-         * @return objet LoginRequest
-         */
-        private LoginRequest buildLoginRequest(String email, String password) {
-            LoginRequest request = new LoginRequest();
-
-            long timestamp = System.currentTimeMillis() / 1000;
-            String nonce = "nonce-" + System.nanoTime();
-            String message = email + ":" + nonce + ":" + timestamp;
-            String hmac = hmacService.hmacSha256(password, message);
-
-            request.setEmail(email);
-            request.setNonce(nonce);
-            request.setTimestamp(timestamp);
-            request.setHmac(hmac);
-
-            return request;
-        }
-
-        /**
-         * Crée une requête de connexion avec HMAC invalide.
-         *
-         * @param email email utilisateur
-         * @return objet LoginRequest invalide
-         */
-        private LoginRequest buildInvalidLoginRequest(String email) {
-            LoginRequest request = new LoginRequest();
-
-            long timestamp = System.currentTimeMillis() / 1000;
-            String nonce = "nonce-" + System.nanoTime();
-
-            request.setEmail(email);
-            request.setNonce(nonce);
-            request.setTimestamp(timestamp);
-            request.setHmac("hmac-invalide");
-
-            return request;
-        }
-
-        /**
-         * Envoie une requête POST /register.
-         *
-         * @param request données d'inscription
-         * @return résultat MVC
-         * @throws Exception si erreur
-         */
-        private MvcResult postRegister(RegisterRequest request) throws Exception {
-            return mockMvc.perform(
-                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(AUTH_URL + "/register")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-            ).andReturn();
-        }
-
-        /**
-         * Envoie une requête POST /login.
-         *
-         * @param request données de connexion
-         * @return résultat MVC
-         * @throws Exception si erreur
-         */
-        private MvcResult postLogin(LoginRequest request) throws Exception {
-            return mockMvc.perform(
-                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(AUTH_URL + "/login")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request))
-            ).andReturn();
-        }
-
-        /**
-         * Vérifie qu'une inscription valide fonctionne.
-         *
-         * @throws Exception si erreur
-         */
-        @Test
-        void testRegisterSuccess() throws Exception {
-            RegisterRequest request = buildRegisterRequest("Jean", "jean@gmail.com", "Azerty1234!@");
-
-            MvcResult result = postRegister(request);
-
-            Assertions.assertEquals(200, result.getResponse().getStatus());
-        }
-
-        /**
-         * Vérifie qu'un email déjà utilisé est refusé.
-         *
-         * @throws Exception si erreur
-         */
-        @Test
-        void testRegisterDuplicate() throws Exception {
-            RegisterRequest request = buildRegisterRequest("Sara", "sara@gmail.com", "Azerty1234!@");
-
-            postRegister(request);
-            MvcResult result = postRegister(request);
-
-            Assertions.assertEquals(400, result.getResponse().getStatus());
-        }
-
-        /**
-         * Vérifie qu'un email vide est refusé.
-         *
-         * @throws Exception si erreur
-         */
-        @Test
-        void testRegisterWithoutEmail() throws Exception {
-            RegisterRequest request = buildRegisterRequest("Test", "", "Azerty1234!@");
-
-            MvcResult result = postRegister(request);
-
-            Assertions.assertEquals(400, result.getResponse().getStatus());
-        }
-
-        /**
-         * Vérifie qu'une connexion valide fonctionne.
-         *
-         * @throws Exception si erreur
-         */
-        @Test
-        void testLoginSuccess() throws Exception {
-            RegisterRequest registerRequest = buildRegisterRequest("Marie", "marie@gmail.com", "Azerty1234!@");
-            postRegister(registerRequest);
-
-            LoginRequest loginRequest = buildLoginRequest("marie@gmail.com", "Azerty1234!@");
-            MvcResult result = postLogin(loginRequest);
-
-            Assertions.assertEquals(200, result.getResponse().getStatus());
-            Assertions.assertTrue(result.getResponse().getContentAsString().contains("accessToken"));
-        }
-
-        /**
-         * Vérifie qu'un utilisateur absent est refusé.
-         *
-         * @throws Exception si erreur
-         */
-        @Test
-        void testLoginUserNotFound() throws Exception {
-            LoginRequest loginRequest = buildLoginRequest("no@gmail.com", "Azerty1234!@");
-            MvcResult result = postLogin(loginRequest);
-
-            Assertions.assertEquals(400, result.getResponse().getStatus());
-        }
-
-        /**
-         * Vérifie qu'un HMAC invalide est refusé.
-         *
-         * @throws Exception si erreur
-         */
-        @Test
-        void testLoginInvalidHmac() throws Exception {
-            RegisterRequest registerRequest = buildRegisterRequest("Paul", "paul@gmail.com", "Azerty1234!@");
-            postRegister(registerRequest);
-
-            LoginRequest loginRequest = buildInvalidLoginRequest("paul@gmail.com");
-            MvcResult result = postLogin(loginRequest);
-
-            Assertions.assertEquals(400, result.getResponse().getStatus());
-        }
-
-        /**
-         * Vérifie qu'un accès à /me sans token est refusé.
-         *
-         * @throws Exception si erreur
-         */
-        @Test
-        void testMeWithoutToken() throws Exception {
-            MvcResult result = mockMvc.perform(
-                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(AUTH_URL + "/me")
-            ).andReturn();
-
-            Assertions.assertEquals(401, result.getResponse().getStatus());
-        }
-
-        /**
-         * Vérifie qu'un logout sans token est refusé.
-         *
-         * @throws Exception si erreur
-         */
-        @Test
-        void testLogoutWithoutToken() throws Exception {
-            MvcResult result = mockMvc.perform(
-                    org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(AUTH_URL + "/logout")
-            ).andReturn();
-
-            Assertions.assertEquals(401, result.getResponse().getStatus());
-        }
+        verify(userRepository).save(user);
+        assertNotNull(user.getToken());
+        assertNotNull(user.getTokenExpiresAt());
     }
 }

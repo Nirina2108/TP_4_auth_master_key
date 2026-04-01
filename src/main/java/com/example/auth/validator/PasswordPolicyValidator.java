@@ -1,10 +1,10 @@
 package com.example.auth.validator;
 
 /**
- * Validateur simple de politique de mot de passe pour TP2.
+ * Validateur simple de politique de mot de passe.
  *
- * Règles imposées :
- * - au moins 12 caractères
+ * Règles actuellement appliquées dans ce code :
+ * - au moins 8 caractères
  * - au moins une majuscule
  * - au moins une minuscule
  * - au moins un chiffre
@@ -16,11 +16,10 @@ package com.example.auth.validator;
 public class PasswordPolicyValidator {
 
     /**
-     * Vérifie si le mot de passe respecte la politique demandée.
-     *
-     * @param password mot de passe à vérifier
-     * @return true si le mot de passe est valide, sinon false
+     * Longueur minimale réellement appliquée par ce validateur.
      */
+    private static final int MIN_LENGTH = 8;
+
     /**
      * Vérifie si le mot de passe respecte les règles de sécurité.
      *
@@ -33,39 +32,35 @@ public class PasswordPolicyValidator {
             return false;
         }
 
-        // longueur minimale
-        if (password.length() < 8) {
+        if (password.length() < MIN_LENGTH) {
             return false;
         }
 
-        // contient majuscule
         if (!password.matches(".*[A-Z].*")) {
             return false;
         }
 
-        // contient minuscule
         if (!password.matches(".*[a-z].*")) {
             return false;
         }
 
-        // contient chiffre
         if (!password.matches(".*[0-9].*")) {
             return false;
         }
 
-        // contient caractère spécial
         if (!password.matches(".*[!@#$%^&*()].*")) {
             return false;
         }
 
         return true;
     }
+
     /**
      * Retourne un message simple expliquant la règle.
      *
      * @return message de validation
      */
     public String getRulesMessage() {
-        return "Le mot de passe doit contenir au moins 12 caractères, une majuscule, une minuscule, un chiffre et un caractère spécial.";
+        return "Le mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule, un chiffre et un caractère spécial.";
     }
 }

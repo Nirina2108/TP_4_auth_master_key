@@ -75,9 +75,11 @@ public class User {
     private LocalDateTime createdAt;
 
     /**
-     * Constructeur vide.
+     * Constructeur vide requis par JPA.
+     * Il est utilisé automatiquement par Hibernate lors du chargement des entités.
      */
     public User() {
+        // Constructeur vide requis par JPA
     }
 
     /**

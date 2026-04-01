@@ -21,6 +21,14 @@ import javafx.stage.Stage;
  */
 public class AuthClientUI extends Application {
 
+    private static final String STYLE_TITLE = "-fx-font-size: 20px; -fx-font-weight: bold;";
+    private static final String STYLE_SECTION_TITLE = "-fx-font-size: 16px; -fx-font-weight: bold;";
+    private static final String STYLE_ERROR = "-fx-text-fill: red;";
+    private static final String STYLE_SUCCESS = "-fx-text-fill: green;";
+    private static final String STYLE_WARNING_BOLD = "-fx-text-fill: orange; -fx-font-weight: bold;";
+    private static final String STYLE_SUCCESS_BOLD = "-fx-text-fill: green; -fx-font-weight: bold;";
+    private static final String STYLE_ERROR_BOLD = "-fx-text-fill: red; -fx-font-weight: bold;";
+
     private TextField registerNameField;
     private TextField registerEmailField;
     private PasswordField registerPasswordField;
@@ -37,10 +45,10 @@ public class AuthClientUI extends Application {
     @Override
     public void start(Stage stage) {
         Label titleLabel = new Label("TP2 - Authentification fragile");
-        titleLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: bold;");
+        titleLabel.setStyle(STYLE_TITLE);
 
         Label registerTitle = new Label("Inscription");
-        registerTitle.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
+        registerTitle.setStyle(STYLE_SECTION_TITLE);
 
         registerNameField = new TextField();
         registerNameField.setPromptText("Nom");
@@ -55,7 +63,7 @@ public class AuthClientUI extends Application {
         registerConfirmPasswordField.setPromptText("Confirmer le mot de passe");
 
         passwordStatusLabel = new Label("Saisissez un mot de passe");
-        passwordStatusLabel.setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
+        passwordStatusLabel.setStyle(STYLE_ERROR_BOLD);
 
         registerMessageLabel = new Label();
 
@@ -67,7 +75,7 @@ public class AuthClientUI extends Application {
         registerConfirmPasswordField.textProperty().addListener((observable, oldValue, newValue) -> updatePasswordIndicator());
 
         Label loginTitle = new Label("Connexion");
-        loginTitle.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
+        loginTitle.setStyle(STYLE_SECTION_TITLE);
 
         loginEmailField = new TextField();
         loginEmailField.setPromptText("Email");
@@ -124,19 +132,19 @@ public class AuthClientUI extends Application {
         passwordStatusLabel.setText(message);
 
         if (!passwordStrengthUtil.isPolicyValid(password)) {
-            passwordStatusLabel.setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
+            passwordStatusLabel.setStyle(STYLE_ERROR_BOLD);
             return;
         }
 
         if (!passwordStrengthUtil.passwordsMatch(password, confirmPassword)) {
-            passwordStatusLabel.setStyle("-fx-text-fill: red; -fx-font-weight: bold;");
+            passwordStatusLabel.setStyle(STYLE_ERROR_BOLD);
             return;
         }
 
         if (PasswordStrengthUtil.GREEN.equals(level)) {
-            passwordStatusLabel.setStyle("-fx-text-fill: green; -fx-font-weight: bold;");
+            passwordStatusLabel.setStyle(STYLE_SUCCESS_BOLD);
         } else {
-            passwordStatusLabel.setStyle("-fx-text-fill: orange; -fx-font-weight: bold;");
+            passwordStatusLabel.setStyle(STYLE_WARNING_BOLD);
         }
     }
 
@@ -148,30 +156,30 @@ public class AuthClientUI extends Application {
 
         if (name == null || name.isBlank()) {
             registerMessageLabel.setText("Le nom est obligatoire.");
-            registerMessageLabel.setStyle("-fx-text-fill: red;");
+            registerMessageLabel.setStyle(STYLE_ERROR);
             return;
         }
 
         if (email == null || email.isBlank()) {
             registerMessageLabel.setText("L'email est obligatoire.");
-            registerMessageLabel.setStyle("-fx-text-fill: red;");
+            registerMessageLabel.setStyle(STYLE_ERROR);
             return;
         }
 
         if (!passwordStrengthUtil.isPolicyValid(password)) {
             registerMessageLabel.setText("Le mot de passe ne respecte pas les règles.");
-            registerMessageLabel.setStyle("-fx-text-fill: red;");
+            registerMessageLabel.setStyle(STYLE_ERROR);
             return;
         }
 
         if (!passwordStrengthUtil.passwordsMatch(password, confirmPassword)) {
             registerMessageLabel.setText("La confirmation du mot de passe est différente.");
-            registerMessageLabel.setStyle("-fx-text-fill: red;");
+            registerMessageLabel.setStyle(STYLE_ERROR);
             return;
         }
 
         registerMessageLabel.setText("Formulaire valide. Inscription prête à être envoyée.");
-        registerMessageLabel.setStyle("-fx-text-fill: green;");
+        registerMessageLabel.setStyle(STYLE_SUCCESS);
     }
 
     private void handleLogin() {
@@ -180,18 +188,18 @@ public class AuthClientUI extends Application {
 
         if (email == null || email.isBlank()) {
             loginMessageLabel.setText("L'email est obligatoire.");
-            loginMessageLabel.setStyle("-fx-text-fill: red;");
+            loginMessageLabel.setStyle(STYLE_ERROR);
             return;
         }
 
         if (password == null || password.isBlank()) {
             loginMessageLabel.setText("Le mot de passe est obligatoire.");
-            loginMessageLabel.setStyle("-fx-text-fill: red;");
+            loginMessageLabel.setStyle(STYLE_ERROR);
             return;
         }
 
         loginMessageLabel.setText("Connexion prête à être envoyée.");
-        loginMessageLabel.setStyle("-fx-text-fill: green;");
+        loginMessageLabel.setStyle(STYLE_SUCCESS);
     }
 
     public static void main(String[] args) {

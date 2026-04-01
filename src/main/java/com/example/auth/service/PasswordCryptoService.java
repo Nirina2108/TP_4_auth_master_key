@@ -5,8 +5,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Cipher;
+import javax.crypto.BadPaddingException;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 
 /**
@@ -20,6 +25,14 @@ import java.util.Base64;
  */
 @Service
 public class PasswordCryptoService {
+
+    /**
+     * Transformation AES utilisée par le service.
+     *
+     * On l'écrit explicitement pour éviter les avertissements Sonar
+     * et garder un comportement clair.
+     */
+    private static final String AES_TRANSFORMATION = "AES/ECB/PKCS5Padding";
 
     /**
      * Clé maître serveur lue depuis application.properties.
@@ -59,12 +72,13 @@ public class PasswordCryptoService {
      */
     public String encrypt(String plainText) {
         try {
-            Cipher cipher = Cipher.getInstance("AES");
+            Cipher cipher = Cipher.getInstance(AES_TRANSFORMATION);
             cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec);
             byte[] encryptedBytes = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
             return Base64.getEncoder().encodeToString(encryptedBytes);
-        } catch (Exception e) {
-            throw new RuntimeException("Erreur pendant le chiffrement du mot de passe", e);
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException
+                 | IllegalBlockSizeException | BadPaddingException e) {
+            throw new IllegalStateException("Erreur pendant le chiffrement du mot de passe", e);
         }
     }
 
@@ -76,13 +90,16 @@ public class PasswordCryptoService {
      */
     public String decrypt(String encryptedText) {
         try {
-            Cipher cipher = Cipher.getInstance("AES");
+            Cipher cipher = Cipher.getInstance(AES_TRANSFORMATION);
             cipher.init(Cipher.DECRYPT_MODE, secretKeySpec);
             byte[] decodedBytes = Base64.getDecoder().decode(encryptedText);
             byte[] decryptedBytes = cipher.doFinal(decodedBytes);
             return new String(decryptedBytes, StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            throw new RuntimeException("Erreur pendant le déchiffrement du mot de passe", e);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("Texte chiffré invalide", e);
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException
+                 | IllegalBlockSizeException | BadPaddingException e) {
+            throw new IllegalStateException("Erreur pendant le déchiffrement du mot de passe", e);
         }
     }
 }
