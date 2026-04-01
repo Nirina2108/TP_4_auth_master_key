@@ -20,18 +20,11 @@ jobs:
 
       - name: Build project
         run: mvn clean package -DskipTests
-        env:
-          APP_MASTER_KEY: ${{ secrets.APP_MASTER_KEY }}
 
       - name: Run tests
         run: mvn test
-        env:
-          APP_SECURITY_SMK: ${{ secrets.APP_MASTER_KEY }}
 
       - name: SonarCloud analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: mvn sonar:sonar
-
-      - name: Build Docker image
-        run: docker build -t cdwfs-auth-app .
