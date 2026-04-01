@@ -95,4 +95,23 @@ public class PasswordCryptoServiceTest {
 
         assertEquals("testLongKey", decrypted);
     }
+    @Test
+    void testDecryptThrowsException() throws Exception {
+        PasswordCryptoService service = createService();
+
+        try {
+            service.decrypt("invalid");
+            fail("Exception attendue");
+        } catch (Exception e) {
+            assertNotNull(e);
+        }
+    }
+    @Test
+    void testEncryptNotNull() throws Exception {
+        PasswordCryptoService service = createService();
+
+        String result = service.encrypt("abc");
+
+        assertNotNull(result);
+    }
 }

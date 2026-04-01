@@ -70,4 +70,13 @@ public class HmacServiceTest {
 
         assertEquals(hmac1, hmac2);
     }
+    @Test
+    void testHmacNotEmpty() {
+        HmacService service = new HmacService();
+
+        String hmac = service.generateHmac("data");
+
+        assertNotNull(hmac);
+        assertFalse(hmac.isEmpty());
+    }
 }
