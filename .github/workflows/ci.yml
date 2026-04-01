@@ -32,14 +32,15 @@ jobs:
       - name: Build + Tests
         run: ./mvnw clean verify
 
-      - name: Analyse SonarCloud
+      - name: Build + Tests + SonarCloud
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          ./mvnw sonar:sonar \
+          echo "Sonar token present"
+          ./mvnw clean verify sonar:sonar \
             -Dsonar.projectKey=Nirina2108_TP_4_auth_master_key \
             -Dsonar.organization=nirina2108 \
             -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.token=${SONAR_TOKEN} \
+            -Dsonar.token=$SONAR_TOKEN \
             -Dsonar.qualitygate.wait=true \
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
