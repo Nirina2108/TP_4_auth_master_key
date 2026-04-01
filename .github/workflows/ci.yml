@@ -3,8 +3,8 @@ name: TP4 CI
 on:
   push:
     branches:
-      - main
       - tp4-dev
+      - main
 
 jobs:
   build-and-sonar:
@@ -20,31 +20,31 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
           cache: maven
 
       - name: Donner les droits au wrapper Maven
         run: chmod +x mvnw
 
-      - name: Compiler et tester
-        run: ./mvnw clean verify
-
-      - name: Verifier SONAR_TOKEN
-        run: |
-          if [ -z "${{ secrets.SONAR_TOKEN }}" ]; then
-            echo "SONAR_TOKEN manquant"
-            exit 1
-          else
-            echo "SONAR_TOKEN present"
-          fi
-
-      - name: Analyse SonarCloud
-        uses: SonarSource/sonarqube-scan-action@v4
+      - name: Verifier le token Sonar
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.projectKey=Nirina2108_TP_4_auth_master_key
-            -Dsonar.organization=nirina2108
-            -Dsonar.host.url=https://sonarcloud.io
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "ERREUR: SONAR_TOKEN absent"
+            exit 1
+          fi
+          echo "SONAR_TOKEN detecte"
+
+      - name: Build + Tests + SonarCloud
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          ./mvnw clean verify sonar:sonar \
+            -Dsonar.projectKey=Nirina2108_TP_4_auth_master_key \
+            -Dsonar.organization=nirina2108 \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.token=$SONAR_TOKEN \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
+            -e
