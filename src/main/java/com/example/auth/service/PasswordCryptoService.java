@@ -23,36 +23,18 @@ import java.util.Base64;
 @Service
 public class PasswordCryptoService {
 
-    /**
-     * Transformation AES-GCM recommandée par SonarCloud (S5542).
-     * GCM = mode authentifié, NoPadding = requis par GCM.
-     */
     private static final String AES_TRANSFORMATION = "AES/GCM/NoPadding";
-
-    /**
-     * Taille du GCM Authentication Tag en bits (standard = 128).
-     */
     private static final int GCM_TAG_LENGTH = 128;
-
-    /**
-     * Taille de l'IV en octets (standard GCM = 12).
-     */
     private static final int GCM_IV_LENGTH = 12;
 
-    /**
-     * Clé maître serveur lue depuis application.properties.
-     */
+    // ✅ Fix java:S2119 — SecureRandom reused as a static final field
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     @Value("${app.security.smk}")
     private String serverMasterKey;
 
-    /**
-     * Clé AES préparée à partir de la SMK.
-     */
     private SecretKeySpec secretKeySpec;
 
-    /**
-     * Prépare la clé AES sur 16 octets.
-     */
     @PostConstruct
     public void init() {
         byte[] keyBytes = serverMasterKey.getBytes(StandardCharsets.UTF_8);
@@ -78,7 +60,7 @@ public class PasswordCryptoService {
         try {
             // 1. Générer un IV aléatoire unique pour chaque chiffrement
             byte[] iv = new byte[GCM_IV_LENGTH];
-            new SecureRandom().nextBytes(iv);
+            SECURE_RANDOM.nextBytes(iv); // ✅ Reuses static instance
 
             // 2. Initialiser le cipher en mode GCM
             Cipher cipher = Cipher.getInstance(AES_TRANSFORMATION);
@@ -86,14 +68,12 @@ public class PasswordCryptoService {
             cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, parameterSpec);
 
             // 3. Chiffrer
-            byte[] encryptedBytes = cipher.doFinal(
-                    plainText.getBytes(StandardCharsets.UTF_8)
-            );
+            byte[] cipherText = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
 
-            // 4. Concaténer IV + ciphertext avant d'encoder en Base64
-            byte[] combined = new byte[GCM_IV_LENGTH + encryptedBytes.length];
+            // 4. Combiner IV + ciphertext et encoder en Base64
+            byte[] combined = new byte[GCM_IV_LENGTH + cipherText.length];
             System.arraycopy(iv, 0, combined, 0, GCM_IV_LENGTH);
-            System.arraycopy(encryptedBytes, 0, combined, GCM_IV_LENGTH, encryptedBytes.length);
+            System.arraycopy(cipherText, 0, combined, GCM_IV_LENGTH, cipherText.length);
 
             return Base64.getEncoder().encodeToString(combined);
 
